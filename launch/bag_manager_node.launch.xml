@@ -6,7 +6,7 @@
         exec="bag_manager_node"
         name="bag_manager_node"
         output="screen">
-    <param from="$(var teleop_param)"/>
+    <param from="$(var bag_param)"/>
     <!-- joy -->
     <remap from="/rosbag2_recorder/trigger" to="/rosbag2_recorder/trigger"/>
   </node>
