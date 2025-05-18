@@ -6,6 +6,7 @@ import subprocess
 import datetime
 import signal
 import os
+import threading
 
 class RosBagManagerNode(Node):
     def __init__(self):
@@ -34,32 +35,36 @@ class RosBagManagerNode(Node):
             10
         )
 
+        # プロセスと状態管理
         self.recording_process = None
+        self.is_recording = False
+        self.lock = threading.Lock()
 
     def trigger_callback(self, msg: Bool):
-        if msg.data and self.recording_process is None:
-            # 録画開始
-            ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-            record_dir = os.path.join(self.session_dir, ts)
-            os.makedirs(record_dir, exist_ok=True)
+        with self.lock:  # ロックで排他制御
+            if msg.data and not self.is_recording:
+                # === 録画開始 ===
+                ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+                record_dir = os.path.join(self.session_dir, ts)
+                os.makedirs(record_dir, exist_ok=True)
 
-            cmd = ['ros2', 'bag', 'record']
-            if self.all_topics:
-                cmd.append('-a')
-            elif self.topics:
-                cmd.extend(self.topics)
-            else:
-                self.get_logger().warn("all_topics=false かつ topics=[] のため、何も録画しません")
-            cmd.extend(['-o', record_dir])
+                cmd = ['ros2', 'bag', 'record']
+                if self.all_topics:
+                    cmd.append('-a')
+                elif self.topics:
+                    cmd.extend(self.topics)
+                else:
+                    self.get_logger().warn("all_topics=false かつ topics=[] のため、何も録画しません")
+                cmd.extend(['-o', record_dir])
 
-            self.get_logger().info(f"録画開始: {' '.join(cmd)}")
-            # 新しいプロセスグループで起動
-            self.recording_process = subprocess.Popen(cmd, preexec_fn=os.setsid)
+                self.get_logger().info(f"録画開始: {' '.join(cmd)}")
+                self.recording_process = subprocess.Popen(cmd, preexec_fn=os.setsid)
+                self.is_recording = True
 
-        elif not msg.data and self.recording_process:
-            # 録画停止
-            self.get_logger().info("録画停止要求 — SIGINT を送信します")
-            self._cleanup()
+            elif not msg.data and self.is_recording:
+                # === 録画停止 ===
+                self.get_logger().info("録画停止要求 — SIGINT を送信します")
+                self._cleanup()
 
     def _cleanup(self):
         """録画プロセスが生きていたら SIGINT で停止し、wait する"""
@@ -71,6 +76,7 @@ class RosBagManagerNode(Node):
                 self.get_logger().error(f"録画プロセス停止中にエラー: {e}")
             finally:
                 self.recording_process = None
+                self.is_recording = False
                 self.get_logger().info("録画を停止しました")
 
     def destroy_node(self):
@@ -86,7 +92,6 @@ def main(args=None):
     # シグナルハンドラ登録（Ctrl+C や docker stop 等）
     def _signal_handler(signum, frame):
         node.get_logger().info(f"シグナル {signal.Signals(signum).name} 受信 — シャットダウンします")
-        # ここで rclpy.shutdown() を呼ぶと spin が抜けて destroy_node が呼ばれます
         rclpy.shutdown()
 
     for sig in (signal.SIGINT, signal.SIGTERM):
@@ -97,7 +102,6 @@ def main(args=None):
     except Exception:
         pass
     finally:
-        # spin から抜けたら destroy_node()/shutdown
         if rclpy.ok():
             node.destroy_node()
             rclpy.shutdown()
