@@ -37,11 +37,9 @@ class RosBagManagerNode(Node):
         self.recording_process = None
 
     def trigger_callback(self, msg: Bool):
-        # true かつ未録画 => 録画開始
         if msg.data and self.recording_process is None:
-            # 録画ごとのタイムスタンプ
+            # 録画開始
             ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-            # <output_dir>/<session_ts>/<record_ts>/ に出力
             record_dir = os.path.join(self.session_dir, ts)
             os.makedirs(record_dir, exist_ok=True)
 
@@ -55,34 +53,54 @@ class RosBagManagerNode(Node):
             cmd.extend(['-o', record_dir])
 
             self.get_logger().info(f"録画開始: {' '.join(cmd)}")
+            # 新しいプロセスグループで起動
             self.recording_process = subprocess.Popen(cmd, preexec_fn=os.setsid)
 
-        # false かつ録画中 => 録画停止
         elif not msg.data and self.recording_process:
+            # 録画停止
             self.get_logger().info("録画停止要求 — SIGINT を送信します")
-            os.killpg(os.getpgid(self.recording_process.pid), signal.SIGINT)
-            self.recording_process.wait()
-            self.recording_process = None
-            self.get_logger().info("録画を停止しました")
+            self._cleanup()
+
+    def _cleanup(self):
+        """録画プロセスが生きていたら SIGINT で停止し、wait する"""
+        if self.recording_process:
+            try:
+                os.killpg(os.getpgid(self.recording_process.pid), signal.SIGINT)
+                self.recording_process.wait(timeout=5)
+            except Exception as e:
+                self.get_logger().error(f"録画プロセス停止中にエラー: {e}")
+            finally:
+                self.recording_process = None
+                self.get_logger().info("録画を停止しました")
 
     def destroy_node(self):
-        # ノード終了時に録画継続中なら停止
-        if self.recording_process:
-            self.get_logger().info("シャットダウン中に録画停止")
-            os.killpg(os.getpgid(self.recording_process.pid), signal.SIGINT)
-            self.recording_process.wait()
+        # ノード終了時のクリーンアップ
+        self.get_logger().info("ノードシャットダウン: 録画プロセス停止処理を実行します")
+        self._cleanup()
         super().destroy_node()
 
 def main(args=None):
     rclpy.init(args=args)
     node = RosBagManagerNode()
+
+    # シグナルハンドラ登録（Ctrl+C や docker stop 等）
+    def _signal_handler(signum, frame):
+        node.get_logger().info(f"シグナル {signal.Signals(signum).name} 受信 — シャットダウンします")
+        # ここで rclpy.shutdown() を呼ぶと spin が抜けて destroy_node が呼ばれます
+        rclpy.shutdown()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, _signal_handler)
+
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except Exception:
         pass
     finally:
-        node.destroy_node()
-        rclpy.shutdown()
+        # spin から抜けたら destroy_node()/shutdown
+        if rclpy.ok():
+            node.destroy_node()
+            rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
