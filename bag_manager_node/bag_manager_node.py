@@ -60,6 +60,11 @@ class RosBagManagerNode(Node):
 
                     cmd.extend(['-o', record_dir])
 
+                    # 追加: 実行コマンドの出力
+                    command_str = ' '.join(cmd)
+                    print(f"[DEBUG] Command to be executed:\n{command_str}")
+                    self.get_logger().info(f"[DEBUG] Command to be executed:\n{command_str}")
+
                     self.get_logger().info(f"録画開始: {' '.join(cmd)}")
                     self.recording_process = subprocess.Popen(cmd, preexec_fn=os.setsid)
                     self.is_recording = True
