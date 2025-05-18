@@ -42,29 +42,36 @@ class RosBagManagerNode(Node):
 
     def trigger_callback(self, msg: Bool):
         with self.lock:  # ロックで排他制御
-            if msg.data and not self.is_recording:
+            if msg.data:
                 # === 録画開始 ===
-                ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S_%f')
-                record_dir = os.path.join(self.session_dir, ts)
-                os.makedirs(record_dir, exist_ok=True)
+                if not self.is_recording:
+                    ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+                    record_dir = os.path.join(self.session_dir, ts)
+                    os.makedirs(record_dir, exist_ok=True)
 
-                cmd = ['ros2', 'bag', 'record']
-                if self.all_topics:
-                    cmd.append('-a')
-                elif self.topics:
-                    cmd.extend(self.topics)
+                    cmd = ['ros2', 'bag', 'record']
+                    if self.all_topics:
+                        cmd.append('-a')
+                    elif self.topics:
+                        cmd.extend(self.topics)
+                    else:
+                        self.get_logger().warn("all_topics=false かつ topics=[] のため、何も録画しません")
+                        return
+
+                    cmd.extend(['-o', record_dir])
+
+                    self.get_logger().info(f"録画開始: {' '.join(cmd)}")
+                    self.recording_process = subprocess.Popen(cmd, preexec_fn=os.setsid)
+                    self.is_recording = True
                 else:
-                    self.get_logger().warn("all_topics=false かつ topics=[] のため、何も録画しません")
-                cmd.extend(['-o', record_dir])
-
-                self.get_logger().info(f"録画開始: {' '.join(cmd)}")
-                self.recording_process = subprocess.Popen(cmd, preexec_fn=os.setsid)
-                self.is_recording = True
-
-            elif not msg.data and self.is_recording:
+                    self.get_logger().warn("すでに録画中です。新しい録画は開始しません。")
+            else:
                 # === 録画停止 ===
-                self.get_logger().info("録画停止要求 — SIGINT を送信します")
-                self._cleanup()
+                if self.is_recording:
+                    self.get_logger().info("録画停止要求 — SIGINT を送信します")
+                    self._cleanup()
+                else:
+                    self.get_logger().warn("録画は現在行われていません。停止要求は無視されます。")
 
     def _cleanup(self):
         """録画プロセスが生きていたら SIGINT で停止し、wait する"""
@@ -84,6 +91,7 @@ class RosBagManagerNode(Node):
         self.get_logger().info("ノードシャットダウン: 録画プロセス停止処理を実行します")
         self._cleanup()
         super().destroy_node()
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -105,6 +113,7 @@ def main(args=None):
         if rclpy.ok():
             node.destroy_node()
             rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()
