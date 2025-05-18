@@ -41,7 +41,7 @@ class RosBagManagerNode(Node):
         # true かつ未録画 => 録画開始
         if msg.data and self.recording_process is None:
             timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-            output_prefix = f"{self.output_dir}_{timestamp}"
+            output_prefix = f"{self.output_dir}/{timestamp}"
             os.makedirs(output_prefix, exist_ok=True)
 
             cmd = ['ros2', 'bag', 'record']
