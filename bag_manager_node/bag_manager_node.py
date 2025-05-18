@@ -47,7 +47,7 @@ class RosBagManagerNode(Node):
                 if not self.is_recording:
                     ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S_%f')
                     record_dir = os.path.join(self.session_dir, ts)
-                    os.makedirs(record_dir, exist_ok=True)
+                    # os.makedirs(record_dir, exist_ok=True)
 
                     cmd = ['ros2', 'bag', 'record']
                     if self.all_topics:
