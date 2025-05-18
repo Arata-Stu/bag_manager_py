@@ -29,7 +29,7 @@ setup(
     entry_points={
         'console_scripts': [
             # 実行可能スクリプトを定義
-            'gnn_node = gnn_node.gnn_node:main',
+            'bag_manager_node = bag_manager_node.bag_manager_node:main',
         ],
     },
 )
