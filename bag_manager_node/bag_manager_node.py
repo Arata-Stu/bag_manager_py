@@ -58,7 +58,7 @@ class RosBagManagerNode(Node):
                         self.get_logger().warn("all_topics=false かつ topics=[] のため、何も録画しません")
                         return
 
-                    cmd.extend(['-o', record_dir])
+                    cmd.extend(['-o', record_dir, '-s', 'mcap'])
 
                     # 追加: 実行コマンドの出力
                     command_str = ' '.join(cmd)
