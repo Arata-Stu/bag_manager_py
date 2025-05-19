@@ -15,7 +15,7 @@ class RosBagManagerNode(Node):
         # パラメータ宣言・取得
         self.declare_parameter('output_dir', 'rosbag2_output')
         self.declare_parameter('all_topics', True)
-        self.declare_parameter('topics', [])
+        self.declare_parameter('topics', ['/rosbag2_recorder/trigger'])
         self.output_dir = self.get_parameter('output_dir').get_parameter_value().string_value
         self.all_topics = self.get_parameter('all_topics').get_parameter_value().bool_value
         self.topics = list(self.get_parameter('topics').get_parameter_value().string_array_value)
